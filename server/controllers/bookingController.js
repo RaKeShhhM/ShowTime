@@ -22,6 +22,19 @@ export const createBooking = async (req, res, next) => {
 
     validateSeatIds(selectedSeats);
 
+    const activeHoldCount = await Booking.countDocuments({
+      user: userId,
+      status: "pending",
+      holdExpiresAt: { $gt: new Date() },
+    });
+    if (activeHoldCount >= 2) {
+      throw new AppError(
+        "You already have two active booking holds.",
+        429,
+        "TOO_MANY_HOLDS",
+      );
+    }
+
     // Get the show details
     const showData = await Show.findById(showId).populate("movie");
     if (!showData) {

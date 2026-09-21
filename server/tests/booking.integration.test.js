@@ -8,13 +8,16 @@ const stripeMock = {
   refunds: { create: jest.fn() },
   webhooks: { constructEvent: jest.fn() },
 };
+let currentUserId = "user_test";
 
 jest.unstable_mockModule("stripe", () => ({
   default: jest.fn(() => stripeMock),
 }));
 jest.unstable_mockModule("@clerk/express", () => ({
   clerkMiddleware: () => (req, res, next) => {
-    req.auth = () => ({ userId: "user_test" });
+    req.auth = () => ({
+      userId: req.headers.authorization?.replace("Bearer ", "") || currentUserId,
+    });
     next();
   },
   clerkClient: { users: { getUser: jest.fn() } },
@@ -82,6 +85,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  currentUserId = `user_test_${Date.now()}_${Math.random()}`;
+  process.env.BOOKING_RATE_LIMIT_MAX = "200";
   stripeMock.checkout.sessions.create.mockResolvedValue({
     id: "cs_test",
     url: "https://checkout.stripe.test/session",
@@ -99,19 +104,20 @@ afterAll(async () => {
 });
 
 describe("booking seat reservations", () => {
-  test("allows exactly one of 50 concurrent requests for the same seat", async () => {
+  test("allows exactly one of 100 concurrent requests for the same seat when the limiter is raised", async () => {
     const show = await createMovieAndShow();
     const responses = await Promise.all(
-      Array.from({ length: 50 }, () =>
+      Array.from({ length: 100 }, (_, index) =>
         request(app)
           .post("/api/booking/create")
           .set("Origin", "http://localhost:5173")
+          .set("Authorization", `Bearer race_user_${index}`)
           .send({ showId: show._id.toString(), selectedSeats: ["A1"] }),
       ),
     );
 
-    expect(responses.filter((response) => response.status >= 200 && response.status < 300)).toHaveLength(1);
-    expect(responses.filter((response) => response.status === 409)).toHaveLength(49);
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(1);
+    expect(responses.filter((response) => response.status === 409)).toHaveLength(99);
     const storedShow = await Show.findById(show._id);
     expect(storedShow.occupiedSeats).toEqual({ A1: expect.anything() });
   });
@@ -146,15 +152,62 @@ describe("booking seat reservations", () => {
     expect(lineItem.price_data.unit_amount).toBe(1250);
     expect(lineItem.quantity).toBe(3);
   });
+
+  test("returns 429 after the authenticated user's booking limit is exceeded", async () => {
+    process.env.BOOKING_RATE_LIMIT_MAX = "1";
+    const show = await createMovieAndShow();
+
+    await request(app)
+      .post("/api/booking/create")
+      .set("Origin", "http://localhost:5173")
+      .send({ showId: show._id.toString(), selectedSeats: ["A1"] })
+      .expect(200);
+
+    const response = await request(app)
+      .post("/api/booking/create")
+      .set("Origin", "http://localhost:5173")
+      .send({ showId: show._id.toString(), selectedSeats: ["A2"] })
+      .expect(429);
+
+    expect(response.body.error.code).toBe("BOOKING_RATE_LIMITED");
+  });
+
+  test("returns 429 when a user already has two unexpired pending holds", async () => {
+    const show = await createMovieAndShow();
+    await Booking.create([
+      {
+        user: currentUserId,
+        show: show._id,
+        amountCents: 1250,
+        bookedSeats: ["A1"],
+        holdExpiresAt: new Date(Date.now() + 60_000),
+      },
+      {
+        user: currentUserId,
+        show: show._id,
+        amountCents: 1250,
+        bookedSeats: ["A2"],
+        holdExpiresAt: new Date(Date.now() + 60_000),
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/booking/create")
+      .set("Origin", "http://localhost:5173")
+      .send({ showId: show._id.toString(), selectedSeats: ["A3"] })
+      .expect(429);
+
+    expect(response.body.error.code).toBe("TOO_MANY_HOLDS");
+  });
 });
 
 describe("booking pagination", () => {
   test("returns a bounded page and pagination metadata for a user's bookings", async () => {
     const show = await createMovieAndShow();
     await Booking.create([
-      { user: "user_test", show: show._id, amountCents: 1250, bookedSeats: ["A1"] },
-      { user: "user_test", show: show._id, amountCents: 1250, bookedSeats: ["A2"] },
-      { user: "user_test", show: show._id, amountCents: 1250, bookedSeats: ["A3"] },
+      { user: currentUserId, show: show._id, amountCents: 1250, bookedSeats: ["A1"] },
+      { user: currentUserId, show: show._id, amountCents: 1250, bookedSeats: ["A2"] },
+      { user: currentUserId, show: show._id, amountCents: 1250, bookedSeats: ["A3"] },
     ]);
 
     const response = await request(app).get("/api/user/bookings?page=1&limit=2").expect(200);

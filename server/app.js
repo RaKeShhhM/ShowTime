@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import { rateLimit } from "express-rate-limit";
+import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import mongoose from "mongoose";
 import { clerkMiddleware } from "@clerk/express";
 import { serve } from "inngest/express";
@@ -32,6 +32,34 @@ const corsOptions = {
   credentials: true,
 };
 
+const positiveIntegerFromEnv = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const trustProxyFromEnv = () => {
+  const value = process.env.TRUST_PROXY;
+  if (value === undefined) return process.env.NODE_ENV === "production" ? 1 : false;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (/^\d+$/.test(value)) return Number(value);
+  return value;
+};
+
+const getBookingRateLimitMax = () =>
+  positiveIntegerFromEnv(process.env.BOOKING_RATE_LIMIT_MAX, 10);
+const bookingRateLimitWindowMs = positiveIntegerFromEnv(
+  process.env.BOOKING_RATE_LIMIT_WINDOW_MS,
+  60 * 1000,
+);
+
+if (process.env.NODE_ENV === "production" && getBookingRateLimitMax() > 100) {
+  logger.warn(
+    { bookingRateLimitMax: getBookingRateLimitMax() },
+    "Booking rate limit is unusually high in production",
+  );
+}
+
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 100,
@@ -42,16 +70,20 @@ const generalLimiter = rateLimit({
 });
 
 const bookingLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
+  windowMs: bookingRateLimitWindowMs,
+  limit: getBookingRateLimitMax,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === "test",
+  keyGenerator: (req) => {
+    const userId = req.auth?.()?.userId;
+    return userId ? `user:${userId}` : `ip:${ipKeyGenerator(req.ip)}`;
+  },
   handler: (req, res, next) => next(new AppError("Too many booking attempts.", 429, "BOOKING_RATE_LIMITED")),
 });
 
 const createApp = () => {
   const app = express();
+  app.set("trust proxy", trustProxyFromEnv());
 
   app.use(requestLogger);
   app.use(helmet());

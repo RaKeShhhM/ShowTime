@@ -3,13 +3,13 @@ import { check } from "k6";
 import { Counter } from "k6/metrics";
 
 const baseUrl = __ENV.BASE_URL || "http://localhost:3000";
-const authToken = __ENV.AUTH_TOKEN;
+const authTokens = (__ENV.AUTH_TOKENS || "").split(",").filter(Boolean);
 const showId = __ENV.SHOW_ID;
 const seatId = __ENV.SEAT_ID || "A1";
 const bookingSuccesses = new Counter("booking_successes");
 
-if (!authToken || !showId) {
-  throw new Error("AUTH_TOKEN and SHOW_ID are required.");
+if (authTokens.length < 100 || !showId) {
+  throw new Error("AUTH_TOKENS with 100 Clerk session tokens and SHOW_ID are required.");
 }
 
 export const options = {
@@ -28,6 +28,7 @@ export const options = {
 };
 
 export default function () {
+  const authToken = authTokens[(__VU - 1) % authTokens.length];
   const response = http.post(
     `${baseUrl}/api/booking/create`,
     JSON.stringify({ showId, selectedSeats: [seatId] }),
@@ -42,6 +43,6 @@ export default function () {
 
   if (response.status === 200) bookingSuccesses.add(1);
   check(response, {
-    "one valid booking outcome": (result) => [200, 409, 429].includes(result.status),
+    "one valid booking outcome": (result) => [200, 409].includes(result.status),
   });
 }
