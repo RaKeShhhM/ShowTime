@@ -2,22 +2,26 @@ import tmdbAxios from "../configs/tmdbAxios.js";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
 import AppError from "../errors/AppError.js";
+import { getOrSet } from "../services/tmdbCache.js";
+
+const NOW_PLAYING_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // API to get now playing movies from TMDB API
 export const getNowPlayingMovies = async (req, res, next) => {
   try {
-    const { data } = await tmdbAxios.get(
-      "https://api.themoviedb.org/3/movie/now_playing",
-      {
-        params: {
-          api_key: process.env.TMDB_API_KEY,
-          language: "en-US",
-          page: 1,
+    const movies = await getOrSet("now-playing", NOW_PLAYING_CACHE_TTL_MS, async () => {
+      const { data } = await tmdbAxios.get(
+        "https://api.themoviedb.org/3/movie/now_playing",
+        {
+          params: {
+            api_key: process.env.TMDB_API_KEY,
+            language: "en-US",
+            page: 1,
+          },
         },
-      },
-    );
-
-    const movies = data.results;
+      );
+      return data.results;
+    });
     res.json({ success: true, movies: movies });
   } catch (error) {
     next(error);

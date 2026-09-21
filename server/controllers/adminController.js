@@ -1,6 +1,7 @@
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import User from "../models/User.js";
+import { getPagination } from "../utils/pagination.js";
 
 // API to check if user is an admin
 export const isAdmin = async (req, res) => {
@@ -46,15 +47,28 @@ export const getAllShows = async (req, res, next) => {
 // API to get all bookings
 export const getAllBookings = async (req, res, next) => {
   try {
-    const bookings = await Booking.find({})
-      .populate("user")
-      .populate({
-        path: "show",
-        populate: { path: "movie" },
-      })
-      .sort({ createdAt: -1 });
+    const { page, limit, skip } = getPagination(req.query);
+    const [bookings, total] = await Promise.all([
+      Booking.find({})
+        .select("user show amountCents bookedSeats status createdAt")
+        .populate({ path: "user", select: "name" })
+        .populate({
+          path: "show",
+          select: "movie showDateTime",
+          populate: { path: "movie", select: "title" },
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Booking.countDocuments(),
+    ]);
 
-    res.json({ success: true, bookings });
+    res.json({
+      success: true,
+      bookings,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     next(error);
   }

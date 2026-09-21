@@ -180,12 +180,12 @@ All endpoints return JSON. Admin endpoints require a signed-in Clerk user whose 
 | `POST` | `/api/show/add` | Admin | Create one or more showtimes |
 | `GET` | `/api/booking/seats/:showId` | Public | Get occupied seats for a show |
 | `POST` | `/api/booking/create` | Clerk session | Create a pending booking and Stripe Checkout session |
-| `GET` | `/api/user/bookings` | Clerk session | Get the current user's bookings |
+| `GET` | `/api/user/bookings?page=1&limit=20` | Clerk session | Get the current user's paginated bookings |
 | `GET` | `/api/user/favorites` | Clerk session | Get favourite movies |
 | `POST` | `/api/user/update-favorite` | Clerk session | Add or remove a favourite movie |
 | `GET` | `/api/admin/dashboard` | Admin | Get booking, user, revenue, and show totals |
 | `GET` | `/api/admin/all-shows` | Admin | List upcoming shows |
-| `GET` | `/api/admin/all-bookings` | Admin | List all bookings |
+| `GET` | `/api/admin/all-bookings?page=1&limit=20` | Admin | List paginated bookings |
 | `POST` | `/api/stripe` | Stripe | Receive and verify payment webhooks |
 
 ## Booking lifecycle

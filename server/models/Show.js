@@ -10,6 +10,9 @@ const showSchema = new mongoose.Schema(
   { minimize: false }
 );
 
+// Supports upcoming showtimes for a specific movie.
+showSchema.index({ movie: 1, showDateTime: 1 });
+
 const Show = mongoose.model("Show", showSchema);
 
 export default Show;

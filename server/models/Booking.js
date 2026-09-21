@@ -19,6 +19,9 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Supports newest-first booking history for one user.
+bookingSchema.index({ user: 1, createdAt: -1 });
+// Supports finding pending bookings whose seat holds have expired.
 bookingSchema.index({ status: 1, holdExpiresAt: 1 });
 
 const Booking = mongoose.model("Booking", bookingSchema);

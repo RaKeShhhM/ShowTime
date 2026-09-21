@@ -148,6 +148,22 @@ describe("booking seat reservations", () => {
   });
 });
 
+describe("booking pagination", () => {
+  test("returns a bounded page and pagination metadata for a user's bookings", async () => {
+    const show = await createMovieAndShow();
+    await Booking.create([
+      { user: "user_test", show: show._id, amountCents: 1250, bookedSeats: ["A1"] },
+      { user: "user_test", show: show._id, amountCents: 1250, bookedSeats: ["A2"] },
+      { user: "user_test", show: show._id, amountCents: 1250, bookedSeats: ["A3"] },
+    ]);
+
+    const response = await request(app).get("/api/user/bookings?page=1&limit=2").expect(200);
+
+    expect(response.body.bookings).toHaveLength(2);
+    expect(response.body.pagination).toEqual({ page: 1, limit: 2, total: 3, totalPages: 2 });
+  });
+});
+
 describe("Stripe webhooks", () => {
   test("processes the same paid checkout event once and queues one confirmation email", async () => {
     const show = await createMovieAndShow();

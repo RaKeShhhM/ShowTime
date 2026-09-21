@@ -1,20 +1,34 @@
 import { clerkClient } from "@clerk/express";
 import Booking from "../models/Booking.js";
 import Movie from "../models/Movie.js";
+import { getPagination } from "../utils/pagination.js";
 
 // API Controller Function to Get User Bookings
 export const getUserBookings = async (req, res, next) => {
   try {
     const user = req.auth().userId;
 
-    const bookings = await Booking.find({ user })
-      .populate({
-        path: "show",
-        populate: { path: "movie" },
-      })
-      .sort({ createdAt: -1 });
+    const { page, limit, skip } = getPagination(req.query);
+    const [bookings, total] = await Promise.all([
+      Booking.find({ user })
+        .select("show amountCents bookedSeats status paymentLink createdAt")
+        .populate({
+          path: "show",
+          select: "movie showDateTime",
+          populate: { path: "movie", select: "title poster_path runtime" },
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Booking.countDocuments({ user }),
+    ]);
 
-    res.json({ success: true, bookings });
+    res.json({
+      success: true,
+      bookings,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     next(error);
   }
