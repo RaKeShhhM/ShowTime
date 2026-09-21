@@ -32,7 +32,7 @@ const migrateCollection = async (collectionName, oldField, centsField) => {
     .filter(Boolean);
 
   if (operations.length) await collection.bulkWrite(operations);
-  console.log(`${collectionName}: migrated ${operations.length} document(s)`);
+  process.stdout.write(`${collectionName}: migrated ${operations.length} document(s)\n`);
 };
 
 if (!process.env.MONGODB_URI) throw new Error("MONGODB_URI is required.");

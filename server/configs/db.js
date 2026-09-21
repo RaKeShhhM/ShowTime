@@ -1,14 +1,9 @@
 import mongoose from "mongoose";
+import { logger } from "./observability.js";
 
 const connectDB = async () => {
-  try {
-    mongoose.connection.on("connected", () =>
-      console.log("Database connected")
-    );
-    await mongoose.connect(`${process.env.MONGODB_URI}/quickshow`);
-  } catch (error) {
-    console.log(error.message);
-  }
+  mongoose.connection.once("connected", () => logger.info("Database connected"));
+  await mongoose.connect(`${process.env.MONGODB_URI}/quickshow`);
 };
 
 export default connectDB;

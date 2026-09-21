@@ -4,6 +4,8 @@ import ProcessedStripeEvent from "../models/ProcessedStripeEvent.js";
 import { inngest } from "../inngest/index.js";
 import { transition } from "../services/bookingStateMachine.js";
 import { releaseSeats } from "../services/seatReservationService.js";
+import AppError from "../errors/AppError.js";
+import { logger } from "../configs/observability.js";
 
 const recordProcessedEvent = async (eventId) => {
   try {
@@ -29,7 +31,7 @@ const refundLatePayment = async (stripeInstance, bookingId, paymentIntentId) => 
   return true;
 };
 
-export const stripeWebhooks = async (request, response) => {
+export const stripeWebhooks = async (request, response, next) => {
   const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
   const signature = request.headers["stripe-signature"];
   let event;
@@ -41,7 +43,7 @@ export const stripeWebhooks = async (request, response) => {
       process.env.STRIPE_WEBHOOK_SECRET,
     );
   } catch (error) {
-    return response.status(400).send(`Webhook Error: ${error.message}`);
+    return next(new AppError("Invalid Stripe webhook signature.", 400, "INVALID_STRIPE_SIGNATURE"));
   }
 
   try {
@@ -59,9 +61,7 @@ export const stripeWebhooks = async (request, response) => {
             : session.payment_intent?.id;
 
         if (session.payment_status !== "paid" || !bookingId || !paymentIntentId) {
-          console.warn(
-            `[Stripe] Ignoring checkout session ${session.id}: payment is not paid, bookingId is missing, or payment intent is missing.`,
-          );
+          logger.warn({ sessionId: session.id, requestId: request.id }, "Ignoring incomplete Stripe checkout session");
           break;
         }
 
@@ -73,9 +73,9 @@ export const stripeWebhooks = async (request, response) => {
         // The conditional transition is the idempotency gate for side effects.
         if (!booking) {
           if (await refundLatePayment(stripeInstance, bookingId, paymentIntentId)) {
-            console.warn(`[Stripe] Refunded late payment for booking ${bookingId}.`);
+            logger.warn({ bookingId, requestId: request.id }, "Refunded late Stripe payment");
           } else {
-            console.log(`[Stripe] Booking ${bookingId} was already handled.`);
+            logger.info({ bookingId, requestId: request.id }, "Stripe booking was already handled");
           }
           break;
         }
@@ -84,7 +84,7 @@ export const stripeWebhooks = async (request, response) => {
           await inngest.send({ name: "app/show.booked", data: { bookingId } });
         } catch (error) {
           // Inngest retries email delivery; inability to enqueue must not retry Stripe.
-          console.warn("[Inngest] Could not queue confirmation email:", error.message);
+          logger.warn({ err: error, requestId: request.id }, "Could not queue confirmation email");
         }
         break;
       }
@@ -102,14 +102,13 @@ export const stripeWebhooks = async (request, response) => {
       }
 
       default:
-        console.log(`[Stripe] Unhandled event type: ${event.type}`);
+        logger.info({ eventType: event.type, requestId: request.id }, "Unhandled Stripe event type");
     }
 
     // Store only after business handling succeeds, so failed work is retried by Stripe.
     await recordProcessedEvent(event.id);
     return response.status(200).json({ received: true });
   } catch (error) {
-    console.error("Webhook processing error:", error);
-    return response.status(500).send("Internal Server Error");
+    next(error);
   }
 };

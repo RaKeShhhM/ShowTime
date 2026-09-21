@@ -1,9 +1,10 @@
 import tmdbAxios from "../configs/tmdbAxios.js";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
+import AppError from "../errors/AppError.js";
 
 // API to get now playing movies from TMDB API
-export const getNowPlayingMovies = async (req, res) => {
+export const getNowPlayingMovies = async (req, res, next) => {
   try {
     const { data } = await tmdbAxios.get(
       "https://api.themoviedb.org/3/movie/now_playing",
@@ -19,18 +20,17 @@ export const getNowPlayingMovies = async (req, res) => {
     const movies = data.results;
     res.json({ success: true, movies: movies });
   } catch (error) {
-    console.error(error);
-    res.json({ success: false, message: error.message });
+    next(error);
   }
 };
 
 // API to add a new show to the database
-export const addShow = async (req, res) => {
+export const addShow = async (req, res, next) => {
   try {
     const { movieId, showsInput, showPriceCents } = req.body;
 
     if (!Number.isInteger(showPriceCents) || showPriceCents < 0) {
-      return res.json({ success: false, message: "Show price must be a whole number of cents." });
+      throw new AppError("Show price must be a whole number of cents.", 400, "INVALID_SHOW_PRICE");
     }
 
     let movie = await Movie.findById(movieId);
@@ -89,13 +89,12 @@ export const addShow = async (req, res) => {
 
     res.json({ success: true, message: "Show Added successfully." });
   } catch (error) {
-    console.error(error);
-    res.json({ success: false, message: error.message });
+    next(error);
   }
 };
 
 // API to get all shows from the database (supports ?q, ?genre, ?year filters)
-export const getShows = async (req, res) => {
+export const getShows = async (req, res, next) => {
   try {
     const { q, genre, year } = req.query;
 
@@ -126,13 +125,12 @@ export const getShows = async (req, res) => {
 
     res.json({ success: true, shows: movies });
   } catch (error) {
-    console.error(error);
-    res.json({ success: false, message: error.message });
+    next(error);
   }
 };
 
 // API to get a single show from the database
-export const getShow = async (req, res) => {
+export const getShow = async (req, res, next) => {
   try {
     const { movieId } = req.params;
     // get all upcoming shows for the movie
@@ -156,7 +154,6 @@ export const getShow = async (req, res) => {
 
     res.json({ success: true, movie, dateTime });
   } catch (error) {
-    console.error(error);
-    res.json({ success: false, message: error.message });
+    next(error);
   }
 };

@@ -11,8 +11,10 @@ import {
   getOccupiedSeatIds,
   validateSeatIds,
 } from "../services/seatReservationService.js";
+import AppError from "../errors/AppError.js";
+import { logger } from "../configs/observability.js";
 
-export const createBooking = async (req, res) => {
+export const createBooking = async (req, res, next) => {
   try {
     const { userId } = req.auth();
     const { showId, selectedSeats } = req.body;
@@ -23,7 +25,7 @@ export const createBooking = async (req, res) => {
     // Get the show details
     const showData = await Show.findById(showId).populate("movie");
     if (!showData) {
-      return res.status(404).json({ success: false, message: "Show not found." });
+      throw new AppError("Show not found.", 404, "SHOW_NOT_FOUND");
     }
     const holdExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -41,7 +43,7 @@ export const createBooking = async (req, res) => {
     } catch (error) {
       await transition(booking._id, "pending", "cancelled");
       if (error instanceof SeatUnavailableError) {
-        return res.status(409).json({ success: false, message: error.message });
+        throw new AppError(error.message, 409, "SEATS_UNAVAILABLE");
       }
       throw error;
     }
@@ -99,30 +101,28 @@ export const createBooking = async (req, res) => {
         },
       });
     } catch (inngestError) {
-      console.warn("[Inngest] Could not send event (dev server may not be running):", inngestError.message);
+      logger.warn({ err: inngestError, requestId: req.id }, "Could not queue booking expiry");
     }
 
     res.json({ success: true, url: session.url });
   } catch (error) {
-    console.log(error.message);
     if (error instanceof InvalidSeatSelectionError) {
-      return res.status(400).json({ success: false, message: error.message });
+      return next(new AppError(error.message, 400, "INVALID_SEAT_SELECTION"));
     }
-    res.json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-export const getOccupiedSeats = async (req, res) => {
+export const getOccupiedSeats = async (req, res, next) => {
   try {
     const { showId } = req.params;
     const occupiedSeats = await getOccupiedSeatIds(showId);
     if (!occupiedSeats) {
-      return res.status(404).json({ success: false, message: "Show not found." });
+      throw new AppError("Show not found.", 404, "SHOW_NOT_FOUND");
     }
 
     res.json({ success: true, occupiedSeats });
   } catch (error) {
-    console.log(error.message);
-    res.json({ success: false, message: error.message });
+    next(error);
   }
 };

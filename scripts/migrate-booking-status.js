@@ -39,7 +39,7 @@ try {
   });
 
   if (operations.length) await bookings.bulkWrite(operations);
-  console.log(`Migrated ${operations.length} booking(s).`);
+  process.stdout.write(`Migrated ${operations.length} booking(s).\n`);
 } finally {
   await mongoose.disconnect();
 }

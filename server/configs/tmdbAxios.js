@@ -1,5 +1,6 @@
 import axios from "axios";
 import axiosRetryPkg from "axios-retry";
+import { logger } from "./observability.js";
 
 // axios-retry v4 ships both a default and named export; use the function directly
 const axiosRetry = axiosRetryPkg.default ?? axiosRetryPkg;
@@ -28,9 +29,7 @@ axiosRetry(tmdbAxios, {
     return networkError || serverError;
   },
   onRetry: (retryCount, error) => {
-    console.log(
-      `[TMDB] Retry attempt #${retryCount} after error: ${error.code || error.message}`
-    );
+    logger.warn({ retryCount, err: error }, "Retrying TMDB request");
   },
 });
 
