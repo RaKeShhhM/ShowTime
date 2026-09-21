@@ -2,23 +2,15 @@ import { inngest } from "../inngest/index.js";
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import stripe from "stripe";
-
-// Function to check availability of selected seats for a movie
-const checkSeatsAvailability = async (showId, selectedSeats) => {
-  try {
-    const showData = await Show.findById(showId);
-    if (!showData) return false;
-
-    const occupiedSeats = showData.occupiedSeats;
-
-    const isAnySeatTaken = selectedSeats.some((seat) => occupiedSeats[seat]);
-
-    return !isAnySeatTaken;
-  } catch (error) {
-    console.log(error.message);
-    return false;
-  }
-};
+import { transition } from "../services/bookingStateMachine.js";
+import {
+  reserveSeats,
+  releaseSeats,
+  SeatUnavailableError,
+  InvalidSeatSelectionError,
+  getOccupiedSeatIds,
+  validateSeatIds,
+} from "../services/seatReservationService.js";
 
 export const createBooking = async (req, res) => {
   try {
@@ -26,18 +18,13 @@ export const createBooking = async (req, res) => {
     const { showId, selectedSeats } = req.body;
     const { origin } = req.headers;
 
-    // Check if the seat is available for the selected show
-    const isAvailable = await checkSeatsAvailability(showId, selectedSeats);
-
-    if (!isAvailable) {
-      return res.json({
-        success: false,
-        message: "Selected Seats are not available.",
-      });
-    }
+    validateSeatIds(selectedSeats);
 
     // Get the show details
     const showData = await Show.findById(showId).populate("movie");
+    if (!showData) {
+      return res.status(404).json({ success: false, message: "Show not found." });
+    }
     const holdExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     // Create a new booking
@@ -49,13 +36,15 @@ export const createBooking = async (req, res) => {
       holdExpiresAt,
     });
 
-    selectedSeats.map((seat) => {
-      showData.occupiedSeats[seat] = userId;
-    });
-
-    showData.markModified("occupiedSeats");
-
-    await showData.save();
+    try {
+      await reserveSeats(showId, selectedSeats, booking._id);
+    } catch (error) {
+      await transition(booking._id, "pending", "cancelled");
+      if (error instanceof SeatUnavailableError) {
+        return res.status(409).json({ success: false, message: error.message });
+      }
+      throw error;
+    }
 
     // Stripe Gateway Initialize
     const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
@@ -74,16 +63,26 @@ export const createBooking = async (req, res) => {
       },
     ];
 
-    const session = await stripeInstance.checkout.sessions.create({
-      success_url: `${origin}/loading/my-bookings`,
-      cancel_url: `${origin}/my-bookings`,
-      line_items: line_items,
-      mode: "payment",
-      metadata: {
-        bookingId: booking._id.toString(),
-      },
-      expires_at: Math.floor(holdExpiresAt.getTime() / 1000),
-    });
+    let session;
+    try {
+      session = await stripeInstance.checkout.sessions.create({
+        success_url: `${origin}/loading/my-bookings`,
+        cancel_url: `${origin}/my-bookings`,
+        line_items: line_items,
+        mode: "payment",
+        metadata: {
+          bookingId: booking._id.toString(),
+        },
+        expires_at: Math.floor(holdExpiresAt.getTime() / 1000),
+      });
+    } catch (error) {
+      try {
+        await releaseSeats(showId, selectedSeats, booking._id);
+      } finally {
+        await transition(booking._id, "pending", "cancelled");
+      }
+      throw error;
+    }
 
     booking.paymentLink = session.url;
     booking.stripeSessionId = session.id;
@@ -106,6 +105,9 @@ export const createBooking = async (req, res) => {
     res.json({ success: true, url: session.url });
   } catch (error) {
     console.log(error.message);
+    if (error instanceof InvalidSeatSelectionError) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     res.json({ success: false, message: error.message });
   }
 };
@@ -113,9 +115,10 @@ export const createBooking = async (req, res) => {
 export const getOccupiedSeats = async (req, res) => {
   try {
     const { showId } = req.params;
-    const showData = await Show.findById(showId);
-
-    const occupiedSeats = Object.keys(showData.occupiedSeats);
+    const occupiedSeats = await getOccupiedSeatIds(showId);
+    if (!occupiedSeats) {
+      return res.status(404).json({ success: false, message: "Show not found." });
+    }
 
     res.json({ success: true, occupiedSeats });
   } catch (error) {

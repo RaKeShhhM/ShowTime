@@ -42,8 +42,8 @@ const SeatLayout = () => {
     if (!selectedTime) {
       return toast("Please select time first");
     }
-    if (!selectedSeats.includes(seatId) && selectedSeats.length > 4) {
-      return toast("You can only select 5 seats");
+    if (!selectedSeats.includes(seatId) && selectedSeats.length > 9) {
+      return toast("You can only select 10 seats");
     }
     if (occupiedSeats.includes(seatId)) {
       return toast("This seat is already booked");

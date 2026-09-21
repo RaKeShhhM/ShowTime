@@ -4,6 +4,7 @@ import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import { sendEmail } from "../configs/nodeMailer.js";
 import { transition } from "../services/bookingStateMachine.js";
+import { releaseSeats } from "../services/seatReservationService.js";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
@@ -71,12 +72,7 @@ const releaseSeatsAndExpireBooking = inngest.createFunction(
 
       // Only the transition winner releases the seats.
       if (booking) {
-        const show = await Show.findById(booking.show);
-        booking.bookedSeats.forEach((seat) => {
-          delete show.occupiedSeats[seat];
-        });
-        show.markModified("occupiedSeats");
-        await show.save();
+        await releaseSeats(booking.show, booking.bookedSeats, booking._id);
       }
     });
   }
@@ -138,7 +134,10 @@ const sendShowReminders = inngest.createFunction(
       for (const show of shows) {
         if (!show.movie || !show.occupiedSeats) continue;
 
-        const userIds = [...new Set(Object.values(show.occupiedSeats))];
+        const userIds = await Booking.find({
+          show: show._id,
+          status: "paid",
+        }).distinct("user");
         if (userIds.length === 0) continue;
 
         const users = await User.find({ _id: { $in: userIds } }).select(
