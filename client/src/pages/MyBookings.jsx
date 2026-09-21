@@ -83,7 +83,7 @@ const MyBookings = () => {
               <p className="text-2xl font-semibold mb-3">
                 {formatCurrency(item.amountCents)}
               </p>
-              {!item.isPaid && (
+              {item.status === "pending" && (
                 <a
                   href={item.paymentLink}
                   target="_blank"

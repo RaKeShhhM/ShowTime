@@ -302,7 +302,7 @@ export const dummyBookingData = [
         },
         "amountCents": 9800,
         "bookedSeats": ["D1", "D2"],
-        "isPaid": false,
+        "status": "pending",
     },
     {
         "_id": "68396334fb83252d82e17295",
@@ -315,7 +315,7 @@ export const dummyBookingData = [
         },
         "amountCents": 4900,
         "bookedSeats": ["A1"],
-        "isPaid": true,
+        "status": "paid",
     },
     {
         "_id": "68396334fb83252d82e17295",
@@ -328,6 +328,6 @@ export const dummyBookingData = [
         },
         "amountCents": 14700,
         "bookedSeats": ["A1", "A2","A3"],
-        "isPaid": true,
+        "status": "paid",
     },
 ]

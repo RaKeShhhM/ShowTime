@@ -38,6 +38,7 @@ export const createBooking = async (req, res) => {
 
     // Get the show details
     const showData = await Show.findById(showId).populate("movie");
+    const holdExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     // Create a new booking
     const booking = await Booking.create({
@@ -45,6 +46,7 @@ export const createBooking = async (req, res) => {
       show: showId,
       amountCents: showData.showPriceCents * selectedSeats.length,
       bookedSeats: selectedSeats,
+      holdExpiresAt,
     });
 
     selectedSeats.map((seat) => {
@@ -80,10 +82,11 @@ export const createBooking = async (req, res) => {
       metadata: {
         bookingId: booking._id.toString(),
       },
-      expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // Expires in 30 minutes
+      expires_at: Math.floor(holdExpiresAt.getTime() / 1000),
     });
 
     booking.paymentLink = session.url;
+    booking.stripeSessionId = session.id;
     await booking.save();
 
     // Run Inngest Scheduler Function to check payment status after 10 minutes
@@ -93,6 +96,7 @@ export const createBooking = async (req, res) => {
         name: "app/checkpayment",
         data: {
           bookingId: booking._id.toString(),
+          holdExpiresAt: holdExpiresAt.toISOString(),
         },
       });
     } catch (inngestError) {

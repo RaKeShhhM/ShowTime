@@ -1,9 +1,9 @@
 import stripe from "stripe";
-import Booking from "../models/Booking.js";
 import User from "../models/User.js";
 import { inngest } from "../inngest/index.js";
 import { sendEmail } from "../configs/nodeMailer.js";
 import { clerkClient } from "@clerk/express";
+import { transition } from "../services/bookingStateMachine.js";
 
 export const stripeWebhooks = async (request, response) => {
   const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
@@ -34,18 +34,23 @@ export const stripeWebhooks = async (request, response) => {
         const { bookingId } = session.metadata;
 
         // Mark booking as paid and populate show/movie
-        const booking = await Booking.findByIdAndUpdate(
+        const booking = await transition(
           bookingId,
-          { isPaid: true, paymentLink: "" },
-          { new: true },
-        ).populate({
+          "pending",
+          "paid",
+          { paymentLink: "", stripePaymentIntentId: paymentIntent.id },
+        );
+
+        if (!booking) break;
+
+        await booking.populate({
           path: "show",
           populate: { path: "movie", model: "Movie" },
         });
 
         // Manually fetch user — Booking.user is a String (Clerk ID), not ObjectId
         // so Mongoose .populate("user") does NOT work here
-        let user = booking ? await User.findById(booking.user) : null;
+        let user = await User.findById(booking.user);
 
         // Fallback: user not in MongoDB (Inngest sync may never have run)
         // Fetch directly from Clerk and save to DB for future use

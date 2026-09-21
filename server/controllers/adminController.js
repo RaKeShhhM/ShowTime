@@ -10,7 +10,7 @@ export const isAdmin = async (req, res) => {
 // API to get dashboard data
 export const getDashboardData = async (req, res) => {
   try {
-    const bookings = await Booking.find({ isPaid: true });
+    const bookings = await Booking.find({ status: "paid" });
     const activeShows = await Show.find({
       showDateTime: { $gte: new Date() },
     }).populate("movie");
