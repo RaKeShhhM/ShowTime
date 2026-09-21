@@ -1,4 +1,5 @@
 import stripe from "stripe";
+import Booking from "../models/Booking.js";
 import ProcessedStripeEvent from "../models/ProcessedStripeEvent.js";
 import { inngest } from "../inngest/index.js";
 import { transition } from "../services/bookingStateMachine.js";
@@ -11,6 +12,21 @@ const recordProcessedEvent = async (eventId) => {
     // A concurrent retry may have recorded the same event after it was handled.
     if (error?.code !== 11000) throw error;
   }
+};
+
+const refundLatePayment = async (stripeInstance, bookingId, paymentIntentId) => {
+  const expiredBooking = await Booking.exists({ _id: bookingId, status: "expired" });
+  if (!expiredBooking) return false;
+
+  await stripeInstance.refunds.create(
+    { payment_intent: paymentIntentId },
+    { idempotencyKey: `late-payment-refund-${paymentIntentId}` },
+  );
+  await transition(bookingId, "expired", "refunded", {
+    paymentLink: "",
+    stripePaymentIntentId: paymentIntentId,
+  });
+  return true;
 };
 
 export const stripeWebhooks = async (request, response) => {
@@ -56,7 +72,11 @@ export const stripeWebhooks = async (request, response) => {
 
         // The conditional transition is the idempotency gate for side effects.
         if (!booking) {
-          console.log(`[Stripe] Booking ${bookingId} was already handled.`);
+          if (await refundLatePayment(stripeInstance, bookingId, paymentIntentId)) {
+            console.warn(`[Stripe] Refunded late payment for booking ${bookingId}.`);
+          } else {
+            console.log(`[Stripe] Booking ${bookingId} was already handled.`);
+          }
           break;
         }
 

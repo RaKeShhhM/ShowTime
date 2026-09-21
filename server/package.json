@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "server": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "lint": "node --check app.js && node --check server.js && node --check controllers/bookingController.js && node --check controllers/stripeWebhooks.js && node --check inngest/index.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +28,9 @@
     "svix": "^1.68.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "jest": "^30.5.2",
+    "mongodb-memory-server": "^11.3.0",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.2.2"
   }
 }

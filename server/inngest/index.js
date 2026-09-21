@@ -11,7 +11,7 @@ import { releaseSeats } from "../services/seatReservationService.js";
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
 const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
 
-const expirePendingBooking = async ({ bookingId, step }) => {
+export const expirePendingBooking = async ({ bookingId, step }) => {
   const booking = await step.run("load-pending-booking", async () => {
     const booking = await Booking.findById(bookingId);
     return booking?.status === "pending" ? booking : null;
