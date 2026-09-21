@@ -119,7 +119,25 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173). The API runs at `http://localhost:3000`.
 
-### 4. Configure local webhooks and jobs
+### 4. Run with Docker
+
+Docker Compose starts MongoDB, the production Express image, and the nginx-served client. It loads credentials from the existing `server/.env` and `client/.env` files; no secrets are stored in the Compose files.
+
+```bash
+docker compose up --build
+```
+
+Open [http://localhost:5173](http://localhost:5173). MongoDB data persists in the named `mongo-data` volume. The server is available at `http://localhost:3000` and exposes `GET /health` for container health checks.
+
+For bind-mounted development containers with Nodemon and Vite hot reload, use:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+Stop the stack with `docker compose down`. Add `-v` only when you intentionally want to remove the persisted MongoDB data.
+
+### 5. Configure local webhooks and jobs
 
 Stripe must be able to send `checkout.session.completed` and `checkout.session.expired` events to the API. For local development, forward events with the Stripe CLI:
 
