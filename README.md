@@ -121,7 +121,7 @@ Open [http://localhost:5173](http://localhost:5173). The API runs at `http://loc
 
 ### 4. Configure local webhooks and jobs
 
-Stripe must be able to send `payment_intent.succeeded` events to the API. For local development, forward events with the Stripe CLI:
+Stripe must be able to send `checkout.session.completed` and `checkout.session.expired` events to the API. For local development, forward events with the Stripe CLI:
 
 ```bash
 stripe login
