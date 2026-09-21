@@ -1,9 +1,33 @@
 import stripe from "stripe";
+import Booking from "../models/Booking.js";
 import User from "../models/User.js";
 import { inngest } from "../inngest/index.js";
 import { sendEmail } from "../configs/nodeMailer.js";
 import { clerkClient } from "@clerk/express";
 import { transition } from "../services/bookingStateMachine.js";
+import { releaseSeats } from "../services/seatReservationService.js";
+
+const refundLatePayment = async (stripeInstance, paymentIntentId, booking) => {
+  if (
+    booking?.status === "refunded" ||
+    (booking?.status === "paid" && booking.stripePaymentIntentId === paymentIntentId)
+  ) {
+    return;
+  }
+
+  await stripeInstance.refunds.create(
+    { payment_intent: paymentIntentId },
+    { idempotencyKey: `late-payment-refund-${paymentIntentId}` },
+  );
+  console.warn(`[Stripe] Refunded late payment ${paymentIntentId}.`);
+
+  if (booking) {
+    await transition(booking._id, booking.status, "refunded", {
+      paymentLink: "",
+      stripePaymentIntentId: paymentIntentId,
+    });
+  }
+};
 
 export const stripeWebhooks = async (request, response) => {
   const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
@@ -33,6 +57,14 @@ export const stripeWebhooks = async (request, response) => {
         const session = sessionList.data[0];
         const { bookingId } = session.metadata;
 
+        const existingBooking = bookingId
+          ? await Booking.findById(bookingId)
+          : null;
+        if (!existingBooking || existingBooking.status !== "pending") {
+          await refundLatePayment(stripeInstance, paymentIntent.id, existingBooking);
+          break;
+        }
+
         // Mark booking as paid and populate show/movie
         const booking = await transition(
           bookingId,
@@ -41,7 +73,14 @@ export const stripeWebhooks = async (request, response) => {
           { paymentLink: "", stripePaymentIntentId: paymentIntent.id },
         );
 
-        if (!booking) break;
+        if (!booking) {
+          await refundLatePayment(
+            stripeInstance,
+            paymentIntent.id,
+            await Booking.findById(bookingId),
+          );
+          break;
+        }
 
         await booking.populate({
           path: "show",
@@ -119,6 +158,18 @@ export const stripeWebhooks = async (request, response) => {
           console.warn("[Inngest] Could not send event:", inngestError.message);
         }
 
+        break;
+      }
+
+      case "checkout.session.expired": {
+        const session = event.data.object;
+        const bookingId = session.metadata?.bookingId;
+        if (!bookingId) break;
+
+        const booking = await transition(bookingId, "pending", "expired");
+        if (booking) {
+          await releaseSeats(booking.show, booking.bookedSeats, booking._id);
+        }
         break;
       }
 

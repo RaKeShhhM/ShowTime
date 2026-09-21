@@ -1,4 +1,5 @@
 import { Inngest } from "inngest";
+import stripe from "stripe";
 import User from "../models/User.js";
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
@@ -8,6 +9,48 @@ import { releaseSeats } from "../services/seatReservationService.js";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
+const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
+
+const expirePendingBooking = async ({ bookingId, step }) => {
+  const booking = await step.run("load-pending-booking", async () => {
+    const booking = await Booking.findById(bookingId);
+    return booking?.status === "pending" ? booking : null;
+  });
+
+  if (!booking) return;
+
+  const sessionStatus = await step.run("expire-checkout-session", async () => {
+    if (!booking.stripeSessionId) return "expired";
+
+    try {
+      const session = await stripeInstance.checkout.sessions.expire(
+        booking.stripeSessionId,
+      );
+      return session.status;
+    } catch (error) {
+      const session = await stripeInstance.checkout.sessions.retrieve(
+        booking.stripeSessionId,
+      );
+      if (session.status === "complete" || session.status === "expired") {
+        return session.status;
+      }
+      throw error;
+    }
+  });
+
+  if (sessionStatus === "complete") return;
+
+  await step.run("transition-and-release-seats", async () => {
+    const expiredBooking = await transition(bookingId, "pending", "expired");
+    if (expiredBooking) {
+      await releaseSeats(
+        expiredBooking.show,
+        expiredBooking.bookedSeats,
+        expiredBooking._id,
+      );
+    }
+  });
+};
 
 // Inngest Function to save user data to a database
 const syncUserCreation = inngest.createFunction(
@@ -63,19 +106,35 @@ const releaseSeatsAndExpireBooking = inngest.createFunction(
       new Date(event.data.holdExpiresAt),
     );
 
-    await step.run("check-payment-status", async () => {
-      const booking = await transition(
-        event.data.bookingId,
-        "pending",
-        "expired",
-      );
-
-      // Only the transition winner releases the seats.
-      if (booking) {
-        await releaseSeats(booking.show, booking.bookedSeats, booking._id);
-      }
-    });
+    await expirePendingBooking({ bookingId: event.data.bookingId, step });
   }
+);
+
+const reconcileExpiredBookings = inngest.createFunction(
+  { id: "reconcile-expired-booking-holds" },
+  { cron: "*/5 * * * *" },
+  async ({ step }) => {
+    const overdueBookings = await step.run("find-overdue-bookings", () =>
+      Booking.find({
+        status: "pending",
+        holdExpiresAt: { $lt: new Date() },
+      }).select("_id holdExpiresAt"),
+    );
+
+    if (!overdueBookings.length) return;
+
+    await step.run("queue-overdue-booking-expiry", () =>
+      inngest.send(
+        overdueBookings.map((booking) => ({
+          name: "app/checkpayment",
+          data: {
+            bookingId: booking._id.toString(),
+            holdExpiresAt: booking.holdExpiresAt.toISOString(),
+          },
+        })),
+      ),
+    );
+  },
 );
 
 // Inngest Function to send email when user books a show
@@ -240,6 +299,7 @@ export const functions = [
   syncUserDeletion,
   syncUserUpdation,
   releaseSeatsAndExpireBooking,
+  reconcileExpiredBookings,
   sendBookingConfirmationEmail,
   sendShowReminders,
   sendNewShowNotifications,
