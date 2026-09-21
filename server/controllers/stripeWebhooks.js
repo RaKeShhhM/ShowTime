@@ -15,7 +15,7 @@ export const stripeWebhooks = async (request, response) => {
     event = stripeInstance.webhooks.constructEvent(
       request.body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET
+      process.env.STRIPE_WEBHOOK_SECRET,
     );
   } catch (error) {
     return response.status(400).send(`Webhook Error: ${error.message}`);
@@ -25,6 +25,7 @@ export const stripeWebhooks = async (request, response) => {
     switch (event.type) {
       case "payment_intent.succeeded": {
         const paymentIntent = event.data.object;
+
         const sessionList = await stripeInstance.checkout.sessions.list({
           payment_intent: paymentIntent.id,
         });
@@ -36,8 +37,11 @@ export const stripeWebhooks = async (request, response) => {
         const booking = await Booking.findByIdAndUpdate(
           bookingId,
           { isPaid: true, paymentLink: "" },
-          { new: true }
-        ).populate({ path: "show", populate: { path: "movie", model: "Movie" } });
+          { new: true },
+        ).populate({
+          path: "show",
+          populate: { path: "movie", model: "Movie" },
+        });
 
         // Manually fetch user — Booking.user is a String (Clerk ID), not ObjectId
         // so Mongoose .populate("user") does NOT work here
@@ -49,17 +53,22 @@ export const stripeWebhooks = async (request, response) => {
           try {
             const clerkUser = await clerkClient.users.getUser(booking.user);
             const email = clerkUser.emailAddresses[0]?.emailAddress;
-            const name = `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim() || "User";
+            const name =
+              `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim() ||
+              "User";
             const image = clerkUser.imageUrl || "";
             // Save to DB so future lookups work
             user = await User.findOneAndUpdate(
               { _id: booking.user },
               { _id: booking.user, email, name, image },
-              { upsert: true, new: true }
+              { upsert: true, new: true },
             );
             console.log(`[User] Synced from Clerk: ${email}`);
           } catch (clerkError) {
-            console.warn("[User] Could not fetch from Clerk:", clerkError.message);
+            console.warn(
+              "[User] Could not fetch from Clerk:",
+              clerkError.message,
+            );
           }
         }
 
@@ -77,7 +86,7 @@ export const stripeWebhooks = async (request, response) => {
                     <strong>Date:</strong> ${new Date(booking.show.showDateTime).toLocaleDateString("en-US")}<br/>
                     <strong>Time:</strong> ${new Date(booking.show.showDateTime).toLocaleTimeString("en-US")}<br/>
                     <strong>Seats:</strong> ${booking.bookedSeats.join(", ")}<br/>
-                    <strong>Amount Paid:</strong> $${booking.amount}
+                    <strong>Amount Paid:</strong> $${(booking.amountCents / 100).toFixed(2)}
                   </p>
                   <p>Enjoy the show! 🍿</p>
                   <p>Thanks for booking with <strong>ShowTime</strong>!</p>
@@ -86,10 +95,16 @@ export const stripeWebhooks = async (request, response) => {
             });
             console.log(`[Email] Confirmation sent to ${user.email}`);
           } catch (emailError) {
-            console.warn("[Email] Failed to send confirmation:", emailError.message);
+            console.warn(
+              "[Email] Failed to send confirmation:",
+              emailError.message,
+            );
           }
         } else {
-          console.warn("[Email] Skipped — user not found for booking:", bookingId);
+          console.warn(
+            "[Email] Skipped — user not found for booking:",
+            bookingId,
+          );
         }
 
         // Also trigger Inngest for extra automation (fails silently if not running)

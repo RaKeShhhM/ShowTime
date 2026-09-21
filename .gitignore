@@ -1,0 +1,5 @@
+# Environment files (examples are safe to commit)
+.env
+.env.*
+!.env.example
+planning/

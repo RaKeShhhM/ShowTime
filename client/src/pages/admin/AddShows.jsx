@@ -9,7 +9,6 @@ import toast from "react-hot-toast";
 const AddShows = () => {
   const { axios, getToken, user, image_base_url } = useAppContext();
 
-  const currency = import.meta.env.VITE_CURRENCY;
   const [nowPlayingMovies, setNowPlayingMovies] = useState([]);
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [dateTimeSelection, setDateTimeSelection] = useState({});
@@ -83,7 +82,7 @@ const AddShows = () => {
       const payload = {
         movieId: selectedMovie,
         showsInput,
-        showPrice: Number(showPrice),
+        showPriceCents: Math.round(Number(showPrice) * 100),
       };
 
       const { data } = await axios.post("/api/show/add", payload, {
@@ -156,11 +155,11 @@ const AddShows = () => {
 
       {/* Show Price Input */}
       <div className="mt-8">
-        <label className="block text-sm font-medium mb-2">Show Price</label>
+        <label className="block text-sm font-medium mb-2">Show Price (USD)</label>
         <div className="inline-flex items-center gap-2 border border-gray-600 px-3 py-2 rounded-md">
-          <p className="text-gray-400 text-sm">{currency}</p>
           <input
             min={0}
+            step="0.01"
             type="number"
             value={showPrice}
             onChange={(e) => setShowPrice(e.target.value)}

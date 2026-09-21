@@ -1,7 +1,6 @@
 import tmdbAxios from "../configs/tmdbAxios.js";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
-import { inngest } from "../inngest/index.js";
 
 // API to get now playing movies from TMDB API
 export const getNowPlayingMovies = async (req, res) => {
@@ -9,8 +8,12 @@ export const getNowPlayingMovies = async (req, res) => {
     const { data } = await tmdbAxios.get(
       "https://api.themoviedb.org/3/movie/now_playing",
       {
-        params: { api_key: process.env.TMDB_API_KEY, language: "en-US", page: 1 },
-      }
+        params: {
+          api_key: process.env.TMDB_API_KEY,
+          language: "en-US",
+          page: 1,
+        },
+      },
     );
 
     const movies = data.results;
@@ -24,7 +27,11 @@ export const getNowPlayingMovies = async (req, res) => {
 // API to add a new show to the database
 export const addShow = async (req, res) => {
   try {
-    const { movieId, showsInput, showPrice } = req.body;
+    const { movieId, showsInput, showPriceCents } = req.body;
+
+    if (!Number.isInteger(showPriceCents) || showPriceCents < 0) {
+      return res.json({ success: false, message: "Show price must be a whole number of cents." });
+    }
 
     let movie = await Movie.findById(movieId);
 
@@ -70,7 +77,7 @@ export const addShow = async (req, res) => {
         showsToCreate.push({
           movie: movieId,
           showDateTime: new Date(dateTimeString),
-          showPrice,
+          showPriceCents,
           occupiedSeats: {}, // Initialize with empty object
         });
       });
@@ -79,12 +86,6 @@ export const addShow = async (req, res) => {
     if (showsToCreate.length > 0) {
       await Show.insertMany(showsToCreate);
     }
-
-    // Trigger Inngest event
-    // await inngest.send({
-    //   name: "app/show.added",
-    //   data: { movieTitle: movie.title },
-    // });
 
     res.json({ success: true, message: "Show Added successfully." });
   } catch (error) {
@@ -117,14 +118,10 @@ export const getShows = async (req, res) => {
       movies = movies.filter((m) => m.title?.toLowerCase().includes(lower));
     }
     if (genre) {
-      movies = movies.filter((m) =>
-        m.genres?.some((g) => g.name === genre)
-      );
+      movies = movies.filter((m) => m.genres?.some((g) => g.name === genre));
     }
     if (year) {
-      movies = movies.filter((m) =>
-        m.release_date?.startsWith(String(year))
-      );
+      movies = movies.filter((m) => m.release_date?.startsWith(String(year)));
     }
 
     res.json({ success: true, shows: movies });
@@ -145,6 +142,7 @@ export const getShow = async (req, res) => {
     });
 
     const movie = await Movie.findById(movieId);
+
     const dateTime = {};
 
     shows.forEach((show) => {

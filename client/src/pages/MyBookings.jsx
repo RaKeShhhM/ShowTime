@@ -5,10 +5,9 @@ import timeFormat from "../lib/timeFormat";
 import { dateFormat } from "../lib/dateFormat";
 import { useAppContext } from "../context/AppContext";
 import { Link } from "react-router-dom";
+import formatCurrency from "../lib/formatCurrency";
 
 const MyBookings = () => {
-  const currency = import.meta.env.VITE_CURRENCY;
-
   const { axios, getToken, user, image_base_url } = useAppContext();
 
   const [bookings, setBookings] = useState([]);
@@ -82,8 +81,7 @@ const MyBookings = () => {
           <div className="flex flex-col md:items-end md:text-right justify-between p-4">
             <div className="flex items-center gap-4">
               <p className="text-2xl font-semibold mb-3">
-                {currency}
-                {item.amount}
+                {formatCurrency(item.amountCents)}
               </p>
               {!item.isPaid && (
                 <a

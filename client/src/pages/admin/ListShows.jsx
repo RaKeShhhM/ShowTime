@@ -3,11 +3,10 @@ import Loading from "../../components/Loading";
 import Title from "../../components/admin/Title";
 import { dateFormat } from "../../lib/dateFormat";
 import { useAppContext } from "../../context/AppContext";
+import formatCurrency from "../../lib/formatCurrency";
 
 const ListShows = () => {
   const { axios, getToken, user } = useAppContext();
-
-  const currency = import.meta.env.VITE_CURRENCY;
 
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,8 +54,9 @@ const ListShows = () => {
                   {Object.keys(show.occupiedSeats).length}
                 </td>
                 <td className="p-2">
-                  {currency}{" "}
-                  {Object.keys(show.occupiedSeats).length * show.showPrice}
+                  {formatCurrency(
+                    Object.keys(show.occupiedSeats).length * show.showPriceCents
+                  )}
                 </td>
               </tr>
             ))}

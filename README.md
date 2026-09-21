@@ -75,14 +75,14 @@ Create `server/.env`:
 MONGODB_URI=mongodb://127.0.0.1:27017
 
 # Clerk server credentials
-CLERK_SECRET_KEY=sk_test_...
+CLERK_SECRET_KEY=<your_clerk_secret_key>
 
 # Movie data
 TMDB_API_KEY=your_tmdb_api_key
 
 # Payments
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_SECRET_KEY=<your_stripe_secret_key>
+STRIPE_WEBHOOK_SECRET=<your_stripe_webhook_secret>
 
 # Email notifications
 SENDER_EMAIL=no-reply@example.com
@@ -93,7 +93,7 @@ SMTP_PASS=your_smtp_password
 Create `client/.env`:
 
 ```env
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
+VITE_CLERK_PUBLISHABLE_KEY=<your_clerk_publishable_key>
 VITE_BASE_URL=http://localhost:3000
 VITE_TMDB_IMAGE_BASE_URL=https://image.tmdb.org/t/p/original
 VITE_CURRENCY=$
@@ -124,7 +124,8 @@ Open [http://localhost:5173](http://localhost:5173). The API runs at `http://loc
 Stripe must be able to send `payment_intent.succeeded` events to the API. For local development, forward events with the Stripe CLI:
 
 ```bash
-stripe listen --forward-to http://localhost:3000/api/stripe
+stripe login
+stripe listen --forward-to localhost:3000/api/stripe
 ```
 
 Copy the displayed webhook signing secret into `STRIPE_WEBHOOK_SECRET`.

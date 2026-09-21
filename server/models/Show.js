@@ -4,7 +4,7 @@ const showSchema = new mongoose.Schema(
   {
     movie: { type: String, required: true, ref: "Movie" },
     showDateTime: { type: Date, required: true },
-    showPrice: { type: Number, required: true },
+    showPriceCents: { type: Number, required: true, min: 0 },
     occupiedSeats: { type: Object, default: {} },
   },
   { minimize: false }

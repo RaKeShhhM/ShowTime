@@ -3,10 +3,9 @@ import Loading from "../../components/Loading";
 import Title from "../../components/admin/Title";
 import { dateFormat } from "../../lib/dateFormat";
 import { useAppContext } from "../../context/AppContext";
+import formatCurrency from "../../lib/formatCurrency";
 
 const ListBookings = () => {
-  const currency = import.meta.env.VITE_CURRENCY;
-
   const { axios, getToken, user } = useAppContext();
 
   const [bookings, setBookings] = useState([]);
@@ -73,7 +72,7 @@ const ListBookings = () => {
                     : "—"}
                 </td>
                 <td className="p-2">
-                  {currency} {item.amount}
+                  {formatCurrency(item.amountCents)}
                 </td>
               </tr>
             ))}

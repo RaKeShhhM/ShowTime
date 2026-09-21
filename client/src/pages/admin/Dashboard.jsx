@@ -12,15 +12,14 @@ import BlurCircle from "../../components/BlurCircle";
 import { dateFormat } from "../../lib/dateFormat";
 import { useAppContext } from "../../context/AppContext";
 import toast from "react-hot-toast";
+import formatCurrency from "../../lib/formatCurrency";
 
 const Dashboard = () => {
   const { axios, getToken, user, image_base_url } = useAppContext();
 
-  const currency = import.meta.env.VITE_CURRENCY;
-
   const [dashboardData, setDashboardData] = useState({
     totalBookings: 0,
-    totalRevenue: 0,
+    totalRevenueCents: 0,
     activeShows: [],
     totalUser: 0,
   });
@@ -35,7 +34,7 @@ const Dashboard = () => {
     },
     {
       title: "Total Revenue",
-      value: currency + dashboardData.totalRevenue || "0",
+      value: formatCurrency(dashboardData.totalRevenueCents),
       icon: CircleDollarSignIcon,
     },
     {
@@ -110,7 +109,7 @@ const Dashboard = () => {
             <p className="font-medium p-2 truncate">{show.movie.title}</p>
             <div className="flex items-center justify-between px-2">
               <p className="text-lg font-medium">
-                {currency} {show.showPrice}
+                {formatCurrency(show.showPriceCents)}
               </p>
               <p className="flex items-center gap-1 text-sm text-gray-400 mt-1 pr-1">
                 <StarIcon className="w-4 h-4 text-primary fill-primary" />

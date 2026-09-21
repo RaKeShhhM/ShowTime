@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import BlurCircle from "../components/BlurCircle";
 import MovieCard from "../components/MovieCard";
@@ -8,10 +8,24 @@ import { SearchIcon, XIcon } from "lucide-react";
 
 // All TMDB genres (static — no need to fetch)
 const GENRES = [
-  "Action", "Adventure", "Animation", "Comedy", "Crime",
-  "Documentary", "Drama", "Family", "Fantasy", "History",
-  "Horror", "Music", "Mystery", "Romance", "Science Fiction",
-  "Thriller", "War", "Western",
+  "Action",
+  "Adventure",
+  "Animation",
+  "Comedy",
+  "Crime",
+  "Documentary",
+  "Drama",
+  "Family",
+  "Fantasy",
+  "History",
+  "Horror",
+  "Music",
+  "Mystery",
+  "Romance",
+  "Science Fiction",
+  "Thriller",
+  "War",
+  "Western",
 ];
 
 const currentYear = new Date().getFullYear();
@@ -116,9 +130,13 @@ const Movies = () => {
             onChange={(e) => setFilter("genre", e.target.value)}
             className="flex-1 min-w-[130px] bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-gray-300 outline-none cursor-pointer hover:border-white/30 transition"
           >
-            <option value="" className="bg-gray-900">All Genres</option>
+            <option value="" className="bg-gray-900">
+              All Genres
+            </option>
             {GENRES.map((g) => (
-              <option key={g} value={g} className="bg-gray-900">{g}</option>
+              <option key={g} value={g} className="bg-gray-900">
+                {g}
+              </option>
             ))}
           </select>
 
@@ -128,9 +146,13 @@ const Movies = () => {
             onChange={(e) => setFilter("year", e.target.value)}
             className="flex-1 min-w-[120px] bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-gray-300 outline-none cursor-pointer hover:border-white/30 transition"
           >
-            <option value="" className="bg-gray-900">All Years</option>
+            <option value="" className="bg-gray-900">
+              All Years
+            </option>
             {YEARS.map((y) => (
-              <option key={y} value={y} className="bg-gray-900">{y}</option>
+              <option key={y} value={y} className="bg-gray-900">
+                {y}
+              </option>
             ))}
           </select>
 
@@ -145,7 +167,6 @@ const Movies = () => {
           )}
         </div>
       </div>
-
 
       {/* Title + count */}
       <div className="flex items-center justify-between mb-6">

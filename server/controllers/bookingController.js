@@ -43,7 +43,7 @@ export const createBooking = async (req, res) => {
     const booking = await Booking.create({
       user: userId,
       show: showId,
-      amount: showData.showPrice * selectedSeats.length,
+      amountCents: showData.showPriceCents * selectedSeats.length,
       bookedSeats: selectedSeats,
     });
 
@@ -66,9 +66,9 @@ export const createBooking = async (req, res) => {
           product_data: {
             name: showData.movie.title,
           },
-          unit_amount: Math.floor(booking.amount) * 100,
+          unit_amount: showData.showPriceCents,
         },
-        quantity: 1,
+        quantity: selectedSeats.length,
       },
     ];
 
