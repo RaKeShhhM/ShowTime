@@ -1,15 +1,19 @@
 import "dotenv/config";
+import { createServer } from "node:http";
 import mongoose from "mongoose";
 import connectDB from "./configs/db.js";
 import createApp from "./app.js";
 import { logger } from "./configs/observability.js";
+import { initializeSocketServer } from "./realtime/socketServer.js";
 
 const port = Number(process.env.PORT) || 3000;
 
 try {
   await connectDB();
   const app = createApp();
-  const server = app.listen(port, () =>
+  const server = createServer(app);
+  initializeSocketServer(server);
+  server.listen(port, () =>
     logger.info({ port }, "Server listening")
   );
 

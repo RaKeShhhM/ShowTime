@@ -1,4 +1,5 @@
 import Show from "../models/Show.js";
+import { emitSeatsUpdated } from "../realtime/seatUpdates.js";
 
 const SEAT_ID_PATTERN = /^[A-Z][0-9]{1,2}$/;
 const VALID_SEAT_IDS = new Set(
@@ -61,12 +62,13 @@ export const reserveSeats = async (showId, seatIds, bookingId) => {
   );
 
   if (result.modifiedCount !== 1) throw new SeatUnavailableError();
+  void emitSeatsUpdated(showId);
 };
 
 export const releaseSeats = async (showId, seatIds, bookingId) => {
   validateSeatIds(seatIds);
 
-  await Show.updateOne(
+  const result = await Show.updateOne(
     { _id: showId },
     [
       {
@@ -93,6 +95,8 @@ export const releaseSeats = async (showId, seatIds, bookingId) => {
       },
     ],
   );
+
+  if (result.modifiedCount === 1) void emitSeatsUpdated(showId);
 };
 
 export const getOccupiedSeatIds = async (showId) => {

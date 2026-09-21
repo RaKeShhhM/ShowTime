@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import { io } from "socket.io-client";
 import { assets } from "../assets/assets";
 import Loading from "../components/Loading";
 import { ArrowRightIcon, ClockIcon } from "lucide-react";
@@ -22,8 +23,11 @@ const SeatLayout = () => {
   const [selectedTime, setSelectedTime] = useState(null);
   const [show, setShow] = useState(null);
   const [occupiedSeats, setOccupiedSeats] = useState([]);
-
-  const navigate = useNavigate();
+  const [checkoutUrl, setCheckoutUrl] = useState("");
+  const [holdExpiresAt, setHoldExpiresAt] = useState(null);
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const [heldSeatIds, setHeldSeatIds] = useState([]);
+  const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
 
   const { axios, getToken, user } = useAppContext();
 
@@ -39,6 +43,7 @@ const SeatLayout = () => {
   };
 
   const handleSeatClick = (seatId) => {
+    if (checkoutUrl) return toast("Your seats are already on hold");
     if (!selectedTime) {
       return toast("Please select time first");
     }
@@ -76,11 +81,9 @@ const SeatLayout = () => {
     </div>
   );
 
-  const getOccupiedSeats = async () => {
+  const getOccupiedSeats = useCallback(async (showId) => {
     try {
-      const { data } = await axios.get(
-        `/api/booking/seats/${selectedTime.showId}`
-      );
+      const { data } = await axios.get(`/api/booking/seats/${showId}`);
       if (data.success) {
         setOccupiedSeats(data.occupiedSeats);
       } else {
@@ -89,15 +92,20 @@ const SeatLayout = () => {
     } catch (error) {
       console.log(error);
     }
-  };
+  }, [axios]);
 
   const bookTickets = async () => {
     try {
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+        return;
+      }
       if (!user) return toast.error("Please login to proceed");
 
       if (!selectedTime || !selectedSeats.length)
         return toast.error("Please select a time and seats");
 
+      setIsBookingSubmitting(true);
       const { data } = await axios.post(
         "/api/booking/create",
         { showId: selectedTime.showId, selectedSeats },
@@ -105,12 +113,16 @@ const SeatLayout = () => {
       );
 
       if (data.success) {
-        window.location.href = data.url;
+        setHeldSeatIds(selectedSeats);
+        setCheckoutUrl(data.url);
+        setHoldExpiresAt(data.holdExpiresAt);
       } else {
         toast.error(data.message);
       }
     } catch (error) {
-      toast.error(error.message);
+      toast.error(error.response?.data?.error?.message || error.message);
+    } finally {
+      setIsBookingSubmitting(false);
     }
   };
 
@@ -120,9 +132,76 @@ const SeatLayout = () => {
 
   useEffect(() => {
     if (selectedTime) {
-      getOccupiedSeats();
+      setSelectedSeats([]);
+      setHeldSeatIds([]);
+      setCheckoutUrl("");
+      setHoldExpiresAt(null);
+      getOccupiedSeats(selectedTime.showId);
     }
-  }, [selectedTime]);
+  }, [selectedTime, getOccupiedSeats]);
+
+  useEffect(() => {
+    if (!selectedTime || !user) return undefined;
+
+    let socket;
+    let cancelled = false;
+    const connect = async () => {
+      const token = await getToken();
+      if (cancelled || !token) return;
+
+      socket = io(import.meta.env.VITE_BASE_URL, { auth: { token } });
+      socket.on("connect", () => {
+        socket.emit("show:join", selectedTime.showId);
+        getOccupiedSeats(selectedTime.showId);
+      });
+      socket.on("seats:updated", ({ showId, occupiedSeatIds }) => {
+        if (showId !== selectedTime.showId) return;
+        setOccupiedSeats(occupiedSeatIds);
+        if (isBookingSubmitting) return;
+
+        setSelectedSeats((previousSeats) => {
+          const seatsTakenByOthers = previousSeats.filter(
+            (seatId) => occupiedSeatIds.includes(seatId) && !heldSeatIds.includes(seatId),
+          );
+          if (seatsTakenByOthers.length) {
+            toast.error("A selected seat was just taken by another customer.");
+            return previousSeats.filter((seatId) => !seatsTakenByOthers.includes(seatId));
+          }
+          return previousSeats;
+        });
+      });
+    };
+
+    connect();
+    return () => {
+      cancelled = true;
+      socket?.emit("show:leave", selectedTime.showId);
+      socket?.disconnect();
+    };
+  }, [getOccupiedSeats, getToken, heldSeatIds, isBookingSubmitting, selectedTime, user]);
+
+  useEffect(() => {
+    if (!holdExpiresAt) return undefined;
+
+    const updateCountdown = () => {
+      const seconds = Math.max(0, Math.ceil((new Date(holdExpiresAt) - Date.now()) / 1000));
+      setSecondsRemaining(seconds);
+      if (seconds === 0) {
+        setHoldExpiresAt(null);
+        setCheckoutUrl("");
+        setHeldSeatIds([]);
+        setSelectedSeats([]);
+        getOccupiedSeats(selectedTime.showId);
+        toast.error("Your seat hold expired. Please choose seats again.");
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [getOccupiedSeats, holdExpiresAt, selectedTime]);
+
+  const holdCountdown = `${Math.floor(secondsRemaining / 60)}:${String(secondsRemaining % 60).padStart(2, "0")}`;
 
   return show ? (
     <div className="flex flex-col md:flex-row px-6 md:px-16 lg:px-40 py-30 md:pt-50">
@@ -167,9 +246,10 @@ const SeatLayout = () => {
 
         <button
           onClick={bookTickets}
+          disabled={isBookingSubmitting}
           className="flex items-center gap-1 mt-20 px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-full font-medium cursor-pointer active:scale-95"
         >
-          Proceed to Checkout
+          {checkoutUrl ? `Continue to Checkout (${holdCountdown})` : "Proceed to Checkout"}
           <ArrowRightIcon strokeWidth={3} className="w-4 h-4" />
         </button>
       </div>

@@ -104,7 +104,7 @@ export const createBooking = async (req, res, next) => {
       logger.warn({ err: inngestError, requestId: req.id }, "Could not queue booking expiry");
     }
 
-    res.json({ success: true, url: session.url });
+    res.json({ success: true, url: session.url, holdExpiresAt: holdExpiresAt.toISOString() });
   } catch (error) {
     if (error instanceof InvalidSeatSelectionError) {
       return next(new AppError(error.message, 400, "INVALID_SEAT_SELECTION"));

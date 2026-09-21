@@ -6,6 +6,7 @@ import { transition } from "../services/bookingStateMachine.js";
 import { releaseSeats } from "../services/seatReservationService.js";
 import AppError from "../errors/AppError.js";
 import { logger } from "../configs/observability.js";
+import { emitSeatsUpdated } from "../realtime/seatUpdates.js";
 
 const recordProcessedEvent = async (eventId) => {
   try {
@@ -79,6 +80,8 @@ export const stripeWebhooks = async (request, response, next) => {
           }
           break;
         }
+
+        void emitSeatsUpdated(booking.show);
 
         try {
           await inngest.send({ name: "app/show.booked", data: { bookingId } });
